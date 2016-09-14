@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8" />
-<title>trainspotting-blog</title>
+<title>trainspotting-blog-20160913_v_0_2</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
@@ -227,7 +227,7 @@ $( document ).ready(code_toggle);
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[5]:</div>
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="c1">#thread management</span>
@@ -285,8 +285,7 @@ to try to improve Caltrain arrival predictions using real time publicly
 available data. However, there were some inconsistencies with the
 station arrival time data we pulled from the API. In order to increase
 the accuracy of our predictions, we needed to verify when, where, and in
-which direction trains were going. In our previous post (link to
-Chloe’s), Chloe Mawer implemented a proof-of-concept Caltrain detector
+which direction trains were going. In our previous <a href="http://www.svds.com/image-processing-python/">post</a>, Chloe Mawer implemented a proof-of-concept Caltrain detector
 using a webcam to acquire a video at our Mountain View offices. She
 explained the use of OpenCV’s python bindings to walk through
 frame-by-frame image processing. She showed that using video alone, it
@@ -380,7 +379,10 @@ failed.</p>
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h2 id="PiCamera-and-Video_Camera-Class">PiCamera and Video_Camera Class<a class="anchor-link" href="#PiCamera-and-Video_Camera-Class">&#182;</a></h2>
+<p>Our classifier involves two main parameters set empirically, motion and time. We first evaluate the amount of motion in selected aReas of Interest (ROIs). This is done at 5 frames per second. The second parameter we evaluate is motion over time, wherein a set amount of motion must occur over a certain amount of time to be considered a train. We set our time threshold at 2 seconds, since express trains take ~3 seconds to pass by our sensor located 50 feet from the tracks. As you can imagine, objects like humans walking past our IoT device will not create large enough motion to trigger a detection event, but large objects like freight trains or trucks will trigger a false positive detection event if they traverse the video sensor ROIs over 2 seconds or more. The next 2 blog posts will discuss how we integrate audio and image classification to decrease false positive events.</p>
+<p>While our video classifier works decently well at detecting trains during the day, we were unable to detect trains (false negatives) in low light conditions after sunset. When we tried additional computationally expensive image processing to detect trains in low light on the Raspberry Pi, this caused all other processes including image capture to grind to a halt!</p>
+<p>So before we dive into the data and how we solved these problems, let’s talk about some of the nuts and bolts. How do we capture video and process it on the Raspberry Pi?</p>
+
 </div>
 </div>
 </div>
@@ -389,9 +391,15 @@ failed.</p>
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Before diving into the data and how we solved these problems, let’s talk
-about some of the nuts and bolts. How do we capture video and process it
-on the Raspberry Pi?</p>
+<h2 id="PiCamera-and-the-Video_Camera-Class">PiCamera and the Video_Camera Class<a class="anchor-link" href="#PiCamera-and-the-Video_Camera-Class">&#182;</a></h2>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
 <p>The <a href="https://picamera.readthedocs.io/"><em>PiCamera</em></a> package is an
 open-source package that offers a pure Python interface to the Pi camera
 module that allows you to record image or video to file or stream. After
@@ -401,6 +409,42 @@ mode</a>, as shown below in the <strong>initialize_camera</strong> and <strong>i
 
 </div>
 </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython2"><pre><span></span><span class="k">class</span> <span class="nc">Video_Camera</span><span class="p">(</span><span class="n">Thread</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">fps</span><span class="p">,</span><span class="n">width</span><span class="p">,</span><span class="n">height</span><span class="p">,</span><span class="n">vflip</span><span class="p">,</span><span class="n">hflip</span><span class="p">,</span><span class="n">mins</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_deque</span><span class="o">=</span><span class="n">deque</span><span class="p">(</span><span class="n">maxlen</span><span class="o">=</span><span class="n">fps</span><span class="o">*</span><span class="n">mins</span><span class="o">*</span><span class="mi">60</span><span class="p">)</span> 
+        <span class="c1">#...</span>
+        
+    <span class="k">def</span> <span class="nf">initialize_camera</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">camera</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">PiCamera</span><span class="p">(</span>
+            <span class="n">resolution</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">width</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">height</span><span class="p">),</span> 
+            <span class="n">framerate</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fps</span><span class="p">))</span>
+            <span class="c1">#...</span>
+    
+    <span class="k">def</span> <span class="nf">initialize_video_stream</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rawCapture</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">array</span><span class="o">.</span><span class="n">PiRGBArray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">camera</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">camera</span><span class="o">.</span><span class="n">resolution</span><span class="p">)</span> 
+        <span class="bp">self</span><span class="o">.</span><span class="n">stream</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera</span><span class="o">.</span><span class="n">capture_continuous</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rawCapture</span><span class="p">,</span>
+             <span class="n">format</span><span class="o">=</span><span class="s2">&quot;bgr&quot;</span><span class="p">,</span> 
+             <span class="n">use_video_port</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        
+    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1">#This method is run when the command start() is given to the thread</span>
+        <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">stream</span><span class="p">:</span>
+            <span class="c1">#add frame with timestamp to input queue</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">input_deque</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+                <span class="s1">&#39;time&#39;</span><span class="p">:</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span>
+                <span class="s1">&#39;frame_raw&#39;</span><span class="p">:</span><span class="n">f</span><span class="o">.</span><span class="n">array</span><span class="p">})</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
 </div>
 <div class="cell border-box-sizing text_cell rendered">
 <div class="prompt input_prompt">
@@ -426,11 +470,11 @@ mode</a>, as shown below in the <strong>initialize_camera</strong> and <strong>i
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>As you may have noticed, we implement our video_camera class as a new <a href="https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/4_Threads.html">thread</a> using the python <a href="https://docs.python.org/2/library/threading.html">threading</a> module. In order to perform real time train detection on a raspberry pi, threading is critical to ensure robust performance and minimization of data loss in our asynchronous detection pipeline. This is because multiple threads within a process (our python script) share the same data space with the main thread, facilitating:</p>
+<p>As you may have noticed, we implement our video_camera class as a new <a href="https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/4_Threads.html">thread</a> using the python <a href="https://docs.python.org/2/library/threading.html">threading</a> module. In order to perform real time train detection on a raspberry pi, threading is critical to ensure robust performance and minimize data loss in our asynchronous detection pipeline. This is because multiple threads within a process (our python script) share the same data space with the main thread, facilitating:</p>
 <ul>
 <li><p>Communication of information between threads</p>
 </li>
-<li><p>Interruption of individual threads without termination</p>
+<li><p>Interruption of individual threads without terminating the entire application</p>
 </li>
 <li><p>Most importantly, individual threads can be put to sleep (held in place) while other threads are running. This allows for nonparallel tasks to run without interruption on a single processor.</p>
 </li>
@@ -447,7 +491,7 @@ For example, imagine you are reading a book but are interrupted by a freight tra
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h2 id="Video_Sensor-Class">Video_Sensor Class<a class="anchor-link" href="#Video_Sensor-Class">&#182;</a></h2>
+<h2 id="Real-Time-Background-Subtraction-and-the-Video_Sensor-Class">Real Time Background Subtraction and the Video_Sensor Class<a class="anchor-link" href="#Real-Time-Background-Subtraction-and-the-Video_Sensor-Class">&#182;</a></h2>
 </div>
 </div>
 </div>
@@ -456,10 +500,35 @@ For example, imagine you are reading a book but are interrupted by a freight tra
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Now that we are collecting and storing data from the PiCamera in the <strong>input_deque</strong>, we can create a new thread, the <strong>video_sensor</strong>, which asynchronously process these images independent of the video_camera thread. The job of the <strong>video_sensor</strong> is to determine which pixels have changed values overtime, i.e. motion. To do this, we will need to identify the background of the image, the non-moving objects in the frame which inadvertently mask motion, and the foreground of the image the new/moving objects in the frame. After we have identified motion, we will apply a 5x5 pixel kernal filter to reduce noise in our motion measurement via the <a href="http://docs.opencv.org/3.0-beta/doc/py_tutorials/py_imgproc/py_morphological_ops/py_morphological_ops.html">cv2.morphologyEx</a> function.</p>
+<p>Now that we are collecting and storing data from the PiCamera in the <strong>input_deque</strong>, we can create a new thread, the <strong>video_sensor</strong>, which asynchronously process these images independent of the video_camera thread. The job of the <strong>video_sensor</strong> is to determine which pixels have changed values overtime, i.e. motion. To do this, we will need to identify the background of the image, the non-moving objects in the frame which inadvertently mask motion, and the foreground of the image: i.e. the new/moving objects in the frame. After we have identified motion, we will apply a 5x5 pixel kernal filter to reduce noise in our motion measurement via the <a href="http://docs.opencv.org/3.0-beta/doc/py_tutorials/py_imgproc/py_morphological_ops/py_morphological_ops.html">cv2.morphologyEx</a> function.</p>
 
 </div>
 </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[7]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython2"><pre><span></span><span class="k">class</span> <span class="nc">Video_Sensor</span><span class="p">(</span><span class="n">Thread</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">video_camera</span><span class="p">,</span><span class="n">mask_type</span><span class="p">):</span>
+        <span class="c1">#...</span>
+        
+    <span class="k">def</span> <span class="nf">apply_mask_and_decrease_noise</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">frame_raw</span><span class="p">):</span>
+        <span class="c1">#apply the background subtraction mask</span>
+        <span class="n">frame_motion</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">frame_raw</span><span class="p">)</span>
+        <span class="c1">#apply morphology mask to decrease noise</span>
+        <span class="n">frame_motion_output</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">morphologyEx</span><span class="p">(</span>
+            <span class="n">frame_motion</span><span class="p">,</span>\
+            <span class="n">cv2</span><span class="o">.</span><span class="n">MORPH_OPEN</span><span class="p">,</span>\
+            <span class="n">kernel</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">),</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">frame_motion_output</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
 </div>
 <div class="cell border-box-sizing text_cell rendered">
 <div class="prompt input_prompt">
@@ -485,18 +554,40 @@ For example, imagine you are reading a book but are interrupted by a freight tra
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Chloe demonstrated(link) that we could detect trains with processed video feeds that isolate motion, through a process called background subtraction, by setting thresholds for the minimum intensity and duration of motion. Since background subtraction must be applied to each frame and the Pi has only modest computational speed, we needed to streamline the algorithm to reduce computational overhead. Luckily, <a href="http://opencv.org/opencv-3-0.html">OpenCV 3</a> comes with multiple <a href="http://docs.opencv.org/3.1.0/db/d5c/tutorial_py_bg_subtraction.html#gsc.tab=0">background subtraction algorithms</a> that run optimized C code with convenient Python APIs including:</p>
+<p>Chloe <a href="http://www.svds.com/image-processing-python/">previously demonstrated</a> that we could detect trains with processed video feeds that isolate motion, through a process called background subtraction, by setting thresholds for the minimum intensity and duration of motion. Since background subtraction must be applied to each frame and the Pi has only modest computational speed, we needed to streamline the algorithm to reduce computational overhead. Luckily, <a href="http://opencv.org/opencv-3-0.html">OpenCV 3</a> comes with multiple <a href="http://docs.opencv.org/3.1.0/db/d5c/tutorial_py_bg_subtraction.html#gsc.tab=0">background subtraction algorithms</a> that run optimized C code with convenient Python APIs including:</p>
 <ul>
-<li><a href="http://www.sciencedirect.com/science/article/pii/S0167865505003521">backgroundsubtractorMOG2</a> : A Gaussian Mixture-based Background/Foreground Segmentation Algorithm developed by Zivkovic and colleagues.  It uses a method to model each background pixel by an optimized mixture of K Gaussian distributions. The weights of the mixture represent the time proportions that those colours stay in the scene. The probable background colours are the ones which stay longer and more static.</li>
+<li><a href="http://www.sciencedirect.com/science/article/pii/S0167865505003521">backgroundsubtractorMOG2</a> : A Gaussian Mixture-based Background/Foreground Segmentation Algorithm developed by Zivkovic and colleagues.  It uses a method to model each background pixel by an optimized mixture of K Gaussian distributions. The weights of the mixture represent the time proportions that those colours stay in the scene. The probable background colours are the ones which stay longer and are more static.</li>
 </ul>
 <p><img src="figures/knn_theory.png" alt="OpenCV" width="200" align='right'></p>
 <ul>
-<li><a href="http://docs.opencv.org/3.0-beta/doc/py_tutorials/py_ml/py_knn/py_knn_understanding/py_knn_understanding.html">backgrounsubtractorKNN</a> : KNN involves searching for the closest match of the test data in the feature space of historical image data. An example of this to the right, where we try and discern which class (blue square or red triangle) the new data (green circle) belongs to by factoring in not only the closest neighbor (red triangle), but the proximity threshold of k-nearest neighbors. For instance, if k=5 then the green circle would be assigned to the blue square class.  </li>
+<li><a href="http://docs.opencv.org/3.0-beta/doc/py_tutorials/py_ml/py_knn/py_knn_understanding/py_knn_understanding.html">backgrounsubtractorKNN</a> : KNN involves searching for the closest match of the test data in the feature space of historical image data. An example of this to the right, where we try and discern which class (blue square or red triangle) the new data (green circle) belongs to by factoring in not only the closest neighbor (red triangle), but the proximity threshold of k-nearest neighbors. For instance, if k=2 then the green circle would be assigned the red triangle (the two red triangles are closest), but if k=6 then the blue square class would be assigned (the closest 6 objects are 4 blue squares and only 2 red triangles).  </li>
 </ul>
-<p>We tested each and found that backgroundsubtractorKNN gave the best balance between rapid response to change and adaptability due to changing conditions, such as a distant tree fluttering in the wind. Moreover, the KNN method  can be improved through machine learning, and the classifer can be saved to file for repeated use. The cons of KNN include artifacts from full field motion, limited tutorials and documentation and that backgroundsubtractorKNN only runs on OpenCV 3.0 and higher.</p>
+<p>We tested each and found that backgroundsubtractorKNN gave the best balance between rapid response to change and adaptability due to changing conditions, such as a distant tree fluttering in the wind. Moreover, the KNN method  can be improved through machine learning, and the classifer can be saved to file for repeated use. The cons of KNN include artifacts from full field motion, limited tutorials, incomplete documentation, and that backgroundsubtractorKNN requires OpenCV 3.0 and higher.</p>
 
 </div>
 </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython2"><pre><span></span><span class="k">class</span> <span class="nc">Mask</span><span class="p">():</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">fps</span><span class="p">):</span>
+        <span class="c1">#...</span>
+        
+    <span class="k">def</span> <span class="nf">make_KNN_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">bgsKNN_history</span><span class="p">,</span><span class="n">bgsKNN_d2T</span><span class="p">,</span><span class="n">bgsKNN_dS</span><span class="p">):</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">createBackgroundSubtractorKNN</span><span class="p">(</span>\
+            <span class="n">history</span><span class="o">=</span><span class="n">bgsKNN_history</span><span class="p">,</span>\
+            <span class="n">dist2Threshold</span><span class="o">=</span><span class="n">bgsKNN_d2T</span><span class="p">,</span>\
+            <span class="n">detectShadows</span><span class="o">=</span><span class="n">bgsKNN_dS</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">mask</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
 </div>
 <div class="cell border-box-sizing text_cell rendered">
 <div class="prompt input_prompt">
@@ -524,7 +615,7 @@ For example, imagine you are reading a book but are interrupted by a freight tra
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h3 id="Dynamically-update-camera-settings-in-response-to-varied-lighting">Dynamically update camera settings in response to varied lighting<a class="anchor-link" href="#Dynamically-update-camera-settings-in-response-to-varied-lighting">&#182;</a></h3>
+<h2 id="Dynamically-update-camera-settings-in-response-to-varied-lighting">Dynamically update camera settings in response to varied lighting<a class="anchor-link" href="#Dynamically-update-camera-settings-in-response-to-varied-lighting">&#182;</a></h2>
 </div>
 </div>
 </div>
@@ -533,20 +624,7 @@ For example, imagine you are reading a book but are interrupted by a freight tra
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Discuss problems of false negatives to do decreasing light in the evening and at night. Look below at this graph. We need to be able to dynamically change the camera properties outside of its given settings. We also picked a camera without an IR filter to gather more light in the &gt;700nm range which is more present at night (this is why some of our pictures seem discoloured compared to traditional cameras like your smart phone that does have an IR filter)</p>
-
-</div>
-</div>
-</div>
-<div class="cell border-box-sizing text_cell rendered">
-<div class="prompt input_prompt">
-</div>
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
-<p>Discuss camera exposure problems</p>
-<ul>
-<li>Using the KNN background subtractor, sitll have lack of light at sunrise/sunset...</li>
-</ul>
+<p>The PiCamera does a great job at adjusting its brightness settings throughout the day, but struggles with limited illumination at night or during the rare downpour in Mountain View. Below you can see the motion we detected from our sensor over 24 hours, where the spikes correspond to moving objects like a CalTrain! Now if we were using a digital camera or phone, we could manually change the exposure time or turn on a flash to increase the motion we could capture post sunset or before the sunrise. However, with an automated IoT device, we must dynamically update the camera settings in response to varied lighting. We also picked a <a href="https://www.raspberrypi.org/products/pi-noir-camera-v2/">night-vision compatible camera</a> without an infared (IR) filter to gather more light in the ~700-1000 nm range, where normal cameras only capture light from ~400-700nm.  This extra far to infared light is why some of our pictures seem discoloured compared to traditional cameras like your smart phone that have an IR filter.</p>
 
 </div>
 </div>
@@ -566,25 +644,31 @@ For example, imagine you are reading a book but are interrupted by a freight tra
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Describe how we determine when to vary the camera settings.</p>
-<ul>
-<li>We record the intensity mean of the image, which the camera tries to keep around 128 at all times (half of the 8 bit 255 limit). </li>
-<li>Set up and lower limits of when to change the mask, we picked 1/8 intensity for night switch, when we empirically observed an inablity to reliably detect motion ~1 hour post sunset. And the high limit of post sunrise brightness requiring resetting back to day settings</li>
-<li>Reset the mask to make sure that we do not falsely trigger train detection from the giant motion artificats that we create from changing all of the pixel values</li>
-<li>Wait 1 second between setting camera settings and triggering the mask, to avoid thread lagging time before the PiCamera 2 changes it actions</li>
-<li>Also do not continually trigger the night settings if it is already night, with checking if the operating mode is already what the camera would switch into</li>
-<li>We also make sure that if the camera operating mode is already night, we do not take </li>
-</ul>
+<p>In order to know when to change the camera settings we record the intensity mean of the image, which the camera tries to keep around 50% max levels at all times (half max = 128, i.e. half of the 8 bit 0-255 limit). We observed that when the sunset light dropped beneath ~1/16 of max, and we were unable to reliably detect motion. For this reason we set a low intensity level of 1/8 max intensity to trigger the camera night model, and we set the intensity threshold to 7/8 max intensity to trigger the day mode. We also do not continually trigger the night settings if it is already night, by checking the camera operating mode.</p>
+<p>After we change the camera settings, we reset the background subtraction mask to ensure that we do not falsely trigger train detection. Importantly, we wait 1 second between setting camera settings and triggering the mask, to ensure the camera thread is not lagging and has updated before the mask is reset.</p>
 
 </div>
 </div>
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[15]:</div>
+<div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython2"><pre><span></span><span class="c1"># Discuss solution of camera exposure problems with code block below</span>
+<div class=" highlight hl-ipython2"><pre><span></span><span class="k">class</span> <span class="nc">Video_Sensor</span><span class="p">(</span><span class="n">Thread</span><span class="p">):</span>
+    <span class="c1">#...</span>
+    <span class="k">def</span> <span class="nf">vary_camera_settings</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">frame_raw</span><span class="p">):</span>
+            <span class="n">intensity_mean</span><span class="o">=</span><span class="n">frame_raw</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span> <span class="c1">#8 bit camera</span>
+            <span class="c1">#adjust camera properties dynamically if needed, then reset mask</span>
+            <span class="k">if</span> <span class="p">((</span><span class="n">intensity_mean</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mf">255.0</span><span class="o">/</span><span class="mi">8</span><span class="p">)</span> <span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">camera</span><span class="o">.</span><span class="n">operating_mode</span><span class="o">==</span><span class="s1">&#39;day&#39;</span><span class="p">)):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">video_camera</span><span class="o">.</span><span class="n">apply_camera_night_settings</span><span class="p">()</span>
+                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mask_object</span><span class="o">.</span><span class="n">make_mask</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mask_type</span><span class="p">)</span>
+                <span class="k">print</span> <span class="s1">&#39;Day Mode Activated - Camera&#39;</span>
+            <span class="k">if</span> <span class="p">((</span><span class="n">intensity_mean</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mf">255.0</span><span class="o">*</span><span class="p">(</span><span class="mi">3</span><span class="o">/</span><span class="mi">4</span><span class="p">))</span> <span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">camera</span><span class="o">.</span><span class="n">operating_mode</span><span class="o">==</span><span class="s1">&#39;night&#39;</span><span class="p">)):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">video_camera</span><span class="o">.</span><span class="n">apply_camera_day_settings</span><span class="p">()</span>
+                <span class="c1">#...</span>
+            <span class="k">return</span> <span class="n">intensity_mean</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">mask</span>
 </pre></div>
 
 </div>
@@ -607,7 +691,7 @@ For example, imagine you are reading a book but are interrupted by a freight tra
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h3 id="Video_Detector-Class">Video_Detector Class<a class="anchor-link" href="#Video_Detector-Class">&#182;</a></h3>
+<h3 id="Real-time-detection-of-trains-with-the-Video_Detector-Class">Real-time detection of trains with the Video_Detector Class<a class="anchor-link" href="#Real-time-detection-of-trains-with-the-Video_Detector-Class">&#182;</a></h3>
 </div>
 </div>
 </div>
@@ -616,17 +700,59 @@ For example, imagine you are reading a book but are interrupted by a freight tra
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Talk about the different steps necessary to set up the detector.</p>
-<p>First Create_ROIS, similiar to Chloe, but have a center ROI to better detect train direction and speed with 3 data points instead of 2
-Create buffers including</p>
-<ul>
-<li>the motion detected buffer that has: length of motion_detected_buffer determines how time of motion translates into detection</li>
-<li>Train detection buffer which is the length of the cooldown period so a train can only be triggered once in a set amount of time</li>
-<li>Frame sampling buffers to keep a short term record of raw and processed frames for future analysis, plotting or saving</li>
-</ul>
+<p>Now that the video sensor is recording motion in a frame 5 times a second (5 FPS), we need to create a Video_Detector for detecting how long and what direction an object has been moving through the frame. In order to do this, we create 3 aReas Of Interest (ROIs) in our frame which the train passes through. By having three ROIs, we can see if a train enters from the left (northbound) or right (southbound). We found that having a third center ROI decreases the effect of noise in an individual ROI; thereby improving our ability to predict train directionality and more accurately calculate speed.</p>
+<p>We next create <a href="https://en.wikipedia.org/wiki/Circular_buffer">circular buffer</a> to store when individual ROIs have exceeded the motion threshold. The length of this motion_detected_buffer is set as the minimum time corresponding to a train, multiplied by the camera FPS (we set this as 2 seconds, i.e. the motion_detected_buffer has a length of 10). We added logic to our Video_Detector class that prevents a train from being detected more than once in cooldown period, to prevent slow moving trains as being registered as a train more than one time. Additionally, we use a frame sampling buffer to keep a short term record of raw and processed frames for future analysis, plotting or saving.</p>
+<p>Using all of these buffers, the Video_Detector class creates ROI_to_process, which is an array of information which stores time, the motion from the 3 ROIs, if motion was detected, and the direction of the train motion.</p>
 
 </div>
 </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython2"><pre><span></span><span class="k">class</span> <span class="nc">Video_Detector</span><span class="p">(</span><span class="n">Thread</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">video_camera</span><span class="p">,</span><span class="n">video_sensor</span><span class="p">,</span>\
+                 <span class="n">motion_threshold</span><span class="p">,</span><span class="n">time_threshold</span><span class="p">,</span><span class="n">cooldown_period</span><span class="p">):</span>
+        
+    <span class="k">def</span> <span class="nf">create_rois</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1">#hardcode aReas Of Interest, ROI: ((x1, y1), (x2, y2))</span>
+        <span class="n">left_roi</span><span class="o">=</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span><span class="mi">80</span><span class="p">),(</span><span class="mi">50</span><span class="p">,</span><span class="mi">135</span><span class="p">))</span>
+        <span class="n">center_roi</span><span class="o">=</span><span class="p">((</span><span class="mi">145</span><span class="p">,</span><span class="mi">90</span><span class="p">),(</span><span class="mi">215</span><span class="p">,</span><span class="mi">130</span><span class="p">))</span>
+        <span class="n">right_roi</span><span class="o">=</span><span class="p">((</span><span class="mi">325</span><span class="p">,</span><span class="mi">100</span><span class="p">),(</span><span class="mi">380</span><span class="p">,</span><span class="mi">130</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">all_rois</span><span class="o">=</span><span class="p">[</span><span class="n">left_roi</span><span class="p">,</span><span class="n">center_roi</span><span class="p">,</span><span class="n">right_roi</span><span class="p">]</span>
+    
+    <span class="k">def</span> <span class="nf">create_buffers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">train_detected_buffer</span><span class="o">=</span><span class="n">deque</span><span class="p">(</span><span class="n">maxlen</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cooldown_period</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">train_direction_buffer</span><span class="o">=</span><span class="n">deque</span><span class="p">(</span><span class="n">maxlen</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cooldown_period</span><span class="p">)</span>
+        <span class="c1">#length of motion_detected_buffer determines how time of motion translates into detection</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">motion_detected_buffer</span><span class="o">=</span><span class="n">deque</span><span class="p">(</span><span class="n">maxlen</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">time_threshold</span><span class="p">)</span>
+        <span class="c1">#prefill these buffers to max length</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">cooldown_period</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">motion_detected_buffer</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">train_detected_buffer</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">train_direction_buffer</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="c1">#create frame sampler buffer (do not prefill this buffer)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frame_sampler_buffer</span><span class="o">=</span><span class="n">deque</span><span class="p">(</span><span class="n">maxlen</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cooldown_period</span><span class="p">)</span>
+        
+    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">framenum</span><span class="o">=</span><span class="mi">0</span>
+        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">kill_all_threads</span><span class="o">!=</span><span class="bp">True</span><span class="p">:</span>
+            <span class="n">data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">output_deque</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+            <span class="c1">#...</span>
+            <span class="c1">#update the history dataframe and adjust the frame number pointer</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">framenum</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">roi_data</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">framenum</span><span class="o">+=</span><span class="mi">1</span>
+            <span class="c1">#add frames and data to sampler</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">frame_sampler_buffer</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+                    <span class="c1">#...</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
 </div>
 <div class="cell border-box-sizing text_cell rendered">
 <div class="prompt input_prompt">
@@ -634,23 +760,6 @@ Create buffers including</p>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <p><img src="figures/video_detector_and_buffers_codeblock.png" alt="Smooth images" width="800" align='left'></p>
-
-</div>
-</div>
-</div>
-<div class="cell border-box-sizing text_cell rendered">
-<div class="prompt input_prompt">
-</div>
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
-<p>Talk about ROI to process, which is a row of information including time, motion from 3 ROIs, if motion was detected, if train was detected and the direction the train classifier declares</p>
-<ul>
-<li>extract ROI to process and get average motion per ROI</li>
-<li>check if motion exceeds the defined threshold and update buffers,roi_data</li>
-<li>check if temporal threshold exceeded for detection (&amp; cooldown not violated)</li>
-<li>update the history dataframe and adjust the frame number pointer</li>
-<li>add frames and prcessed motion and detection data to sampler</li>
-</ul>
 
 </div>
 </div>
@@ -679,14 +788,8 @@ Create buffers including</p>
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Discuss need for persisting data
-Briefly discuss why pandas dataframe chosen (easy for import, analysis and export of data: 
-    pandas is a Python package providing fast, flexible, and expressive data structures designed to make working with “relational” or “labeled” data both easy and intuitive. It aims to be the fundamental high-level building block for doing practical, real world data analysis in Python. flexible open source data analysis / manipulation tool</p>
-<p>pandas is well suited for many different kinds of data:</p>
-<p>Tabular data with heterogeneously-typed columns, as in an SQL table or Excel spreadsheet
-Ordered and unordered (not necessarily fixed-frequency) time series data.
-Arbitrary matrix data (homogeneously typed or heterogeneous) with row and column labels
-Any other form of observational / statistical data sets. The data actually need not be labeled at all to be placed into a pandas data structure</p>
+<p>Now that we are storing relevant train sensor and detector data in memory, we use <a href="http://pandas.pydata.org/pandas-docs/stable/generated/pandas.DataFrame.html">pandas dataframes</a> to persist this data for future analysis. Pandas is a python package that provides fast and flexible data structures designed to work efficiently with both relational and labeled data. Similar to using SQL (structured query language) for managing data held in relational database management systems (RDBMS), pandas is an excellent tool for data analysis, that makes importing, querying and exporting data easy.</p>
+<p>The History class is used to create a pandas dataframe that loads time, sensor and processed detector data. As the raspberry pi 3 has limited memory (1 GB), we implement the History pandas dataframe as a limited length circular buffer to prevent memory errors.</p>
 
 </div>
 </div>
@@ -696,7 +799,19 @@ Any other form of observational / statistical data sets. The data actually need 
 <div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython2"><pre><span></span><span class="c1"># Discuss the history dataframe class</span>
+<div class=" highlight hl-ipython2"><pre><span></span><span class="k">class</span> <span class="nc">History</span><span class="p">():</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">fps</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">len_history</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">fps</span><span class="o">*</span><span class="mi">600</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;time&#39;</span><span class="p">,</span><span class="s1">&#39;left_roi&#39;</span><span class="p">,</span><span class="s1">&#39;middle_roi&#39;</span><span class="p">,</span><span class="s1">&#39;right_roi&#39;</span><span class="p">,</span>\
+                 <span class="s1">&#39;motion_detected&#39;</span><span class="p">,</span><span class="s1">&#39;train_detected&#39;</span><span class="p">,</span><span class="s1">&#39;direction&#39;</span><span class="p">]</span> 
+        
+    <span class="k">def</span> <span class="nf">setup_history</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1">#create pandas dataframe that contains  column information</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">history</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="o">.</span><span class="n">from_records</span><span class="p">(</span>\
+            <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">len_history</span><span class="p">,</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">columns</span><span class="p">))),</span>
+            <span class="n">index</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">len_history</span><span class="p">),</span>
+            <span class="n">columns</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
+        <span class="c1">#...</span>
 </pre></div>
 
 </div>
@@ -714,18 +829,15 @@ Any other form of observational / statistical data sets. The data actually need 
 </div>
 </div>
 </div>
-<div class="cell border-box-sizing code_cell rendered">
-<div class="input">
-<div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
 <div class="inner_cell">
-    <div class="input_area">
-<div class=" highlight hl-ipython2"><pre><span></span><span class="n">Analysis</span> <span class="n">of</span> <span class="n">dataframe</span> <span class="n">data</span>
-</pre></div>
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Using pandas SQL-like commands, we can now easily retrieve and analyze train detection events. Shown below is 17 frames (3.4 seconds of data at 5 FPS) of data of a northbound Caltrain!</p>
 
 </div>
 </div>
-</div>
-
 </div>
 <div class="cell border-box-sizing text_cell rendered">
 <div class="prompt input_prompt">
@@ -751,7 +863,7 @@ Any other form of observational / statistical data sets. The data actually need 
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Want to be able to visualize this history dataframe as well as raw and unprocessed data. This requires additional processing time and resources, and we do not want to interrupt the video detector, so therefore create the detector worker class.</p>
+<p>Now that we are persisting data in a pandas dataframe, we want to be able to visualize the raw sensor and processed detector data. This requires additional processing time and resources, and we do not want to interrupt the video detector. We therefore use threading to create the Detector_Worker class. The Detector_Worker is responsible for plotting video, determing train direction and returning sampled frames to the jupyter console or filesystem. Shown below is the output of the video plotter. On the top left is one raw frame of video, and on the bottom right is one KNN-background-subtracted motion frame. The two right frames have the three ROIs overlaid onto the image.</p>
 
 </div>
 </div>
@@ -771,16 +883,6 @@ Any other form of observational / statistical data sets. The data actually need 
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Video plotter and frame sampler module use code that extracts out information from the history dataframe when instructed and then can be used</p>
-
-</div>
-</div>
-</div>
-<div class="cell border-box-sizing text_cell rendered">
-<div class="prompt input_prompt">
-</div>
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
 <h3 id="Train-Direction">Train Direction<a class="anchor-link" href="#Train-Direction">&#182;</a></h3>
 </div>
 </div>
@@ -790,27 +892,57 @@ Any other form of observational / statistical data sets. The data actually need 
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p><img src="figures/Direction_Detection.png" alt="Smooth images" width="650" align='left'></p>
+<p>In order to accurately detect train direction, the three of us on the Trainspotting team all tried different methods.</p>
+<ul>
+<li>Static ‘Boolean’ Method (Chloe): Track motion level in each individual ROIs and then select north/south depending on which ROI exceeded the threshold first. We found that this static boolean method does not work well for express trains which triggered the north and south facing detectors simultaneously.</li>
+</ul>
+<ul>
+<li><p>Streaming ‘Integration’ Method (Colin): This method involved summing the historical levels motion in each ROI, and determining direction by which ROI had the highest sum. We found that this method was too reliant on accurate setting of  ROI position, and broke down if the camera was ever moved.</p>
+</li>
+<li><p>Streaming ‘Curve-Fit’ Method (Matt R) - We next tried to combine the boolean and integration method with a simple <a href="https://en.wikipedia.org/wiki/Sigmoid_function">sigmoid model</a> of motion across the frame. If average motion across the three ROIs exceeded our motion threshold, we  empirically fit a sigmoid curve where the ROI sensor hits 50% of the max value. If the data was noisy and curve fitting failed, we revert back to Chloe's static boolean method. Moreover, our curve-fit method  allows determination of train speed if the real distance between the ROIs is known!</p>
+</li>
+</ul>
 
 </div>
 </div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython2"><pre><span></span><span class="k">class</span> <span class="nc">Detector_Worker</span><span class="p">(</span><span class="n">Thread</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">curve_func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">x</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span><span class="n">c</span><span class="p">):</span>
+        <span class="c1">#Sigmoid function</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">a</span><span class="o">/</span><span class="p">(</span><span class="n">c</span><span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">b</span> <span class="o">*</span> <span class="o">-</span><span class="n">x</span><span class="p">))</span>
+    
+    <span class="c1">#...</span>
+    
+    <span class="k">def</span> <span class="nf">alternate_km_map</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">ydata</span><span class="p">,</span><span class="n">t</span><span class="p">,</span><span class="n">event_time</span><span class="p">):</span>
+        <span class="c1">#determine emperically where the ROI sensor hits 50% of the max value</span>
+        <span class="n">max_value</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">ydata</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="nb">len</span><span class="p">(</span><span class="n">ydata</span><span class="p">)):</span>
+            <span class="c1">#if the value is above half of the max value</span>
+            <span class="k">if</span> <span class="n">ydata</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">max_value</span><span class="o">/</span><span class="mf">2.0</span><span class="p">:</span>
+                <span class="n">km</span><span class="o">=</span><span class="n">t</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">-</span><span class="n">event_time</span>
+                <span class="k">return</span> <span class="n">km</span>
+        <span class="c1">#if the value never exceeds half of the max value</span>
+        <span class="c1">#return the end of the time series</span>
+        <span class="n">km</span><span class="o">=</span><span class="n">t</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="n">event_time</span>
+        <span class="k">return</span> <span class="n">km</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
 </div>
 <div class="cell border-box-sizing text_cell rendered">
 <div class="prompt input_prompt">
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>We all tried to design different methods, and they had varying results</p>
-<ul>
-<li>Static ‘Boolean’ Method (Chloe) - Track activity of motion thresholds seperately in ROIs, select N/S depending on which train passed first. Does not work well for express trains which trigger in motion simultaneously</li>
-</ul>
-<ul>
-<li>Streaming ‘Integration’ Method (Colin) - Sum the value of the motion, but is sensitive to changes in camera position or not accurate declaration of ROI location</li>
-</ul>
-<p><img src="figures/Direction_Detection_Code_Small.png" alt="OpenCV" width="300" align='right'></p>
-<ul>
-<li>Streaming ‘Curve-Fit’ Method (Matt R) - Determine empirically fitting to a sigmoid curve where the ROI sensor hits 50% of the max value. If it never exceeds half of the max value, revert back to Chloe's static boolean method. This also allows determination of train speed if the real distance between the ROIs is known. </li>
-</ul>
+<p><img src="figures/Direction_Detection_Code_Small.png" alt="OpenCV" width="300" align='left'></p>
 
 </div>
 </div>
@@ -821,6 +953,26 @@ Any other form of observational / statistical data sets. The data actually need 
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <p><img src="figures/Direction_Detection_Code_Big.png" alt="Smooth images" width="650" align='left'></p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Below is an example of a local southbound train passing our Mountain View office. If you'd like to learn more about analyzing time series data, please see our colleague Tom Fawcett's <a href="http://www.svds.com/avoiding-common-mistakes-with-time-series/">blog post on avoiding commond mistakes with time series data</a></p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p><img src="figures/Direction_Detection.png" alt="Smooth images" width="650" align='left'></p>
 
 </div>
 </div>
@@ -862,7 +1014,7 @@ Any other form of observational / statistical data sets. The data actually need 
 <li><strong>History</strong>: An accessible <a href="http://pandas.pydata.org">Pandas</a> dataframe that is updated in real time to persist data and faciliates SQL-like queries</li>
 <li><strong>Detector Worker</strong>: Assists the video detector in evaluating image, motion and history data. This class consists of several modules (yellow) responsible for sampling frames from the video feed, plotting data and running models to determine train direction.</li>
 </ul>
-<p>All of the software is written in <a href="https://www.python.org">python 2.7</a> and can be controlled from a <a href="http://jupyter.org">Jupyter Notebook</a> run locally on the Pi or remotely on your laptop. Trainspotting blog posts including <em>Connecting an IoT device to the Cloud</em> and <em>How to Build a Deployable IoT Device using a Raspberry Pi</em> will cover using a remote server to control a Raspberry Pi in greater detail!</p>
+<p>All of the software is written in <a href="https://www.python.org">python 2.7</a> and can be controlled from a <a href="http://jupyter.org">Jupyter Notebook</a> run locally on the Pi or remotely on your laptop. <a href="http://www.svds.com/introduction-to-trainspotting/">Trainspotting blog</a> posts including <em>Connecting an IoT device to the Cloud</em> and <em>How to Build a Deployable IoT Device using a Raspberry Pi</em> will cover using a remote server to control a Raspberry Pi in greater detail!</p>
 
 </div>
 </div>
